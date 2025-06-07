@@ -5,7 +5,7 @@ Flood Risk Assessment using DEM data and Earth Observation tools (GEE + QGIS) fo
 A project to map flood-prone areas in the Greater Accra Region using Earth Observation data from Google Earth Engine (GEE) and QGIS. This study integrates Digital Elevation Models (DEM) with administrative boundaries to assess vulnerability.
 
 ## 🗺️ Map Preview
-![Flood Risk Map](./assets/flood-risk-map.png)
+https://github.com/rache3/flood-risk-mapping-greater-accra/blob/main/Flood%20Risk%20Assessment%20Map.jpeg
 
 ## Tools Used
 - **Google Earth Engine (GEE)** – DEM data sourcing and raster analysis
