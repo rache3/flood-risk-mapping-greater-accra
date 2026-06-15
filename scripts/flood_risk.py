@@ -319,7 +319,6 @@ def run():
     rainfall_raw = align_to_reference(RAINFALL_PATH, ref_profile)
 
     # Smooth rainfall to remove GPM IMERG tile artifacts (10km → 30m upsampling)
-    from scipy.ndimage import gaussian_filter
     valid_mask   = np.isfinite(rainfall_raw)
     smoothed     = gaussian_filter(np.where(valid_mask, rainfall_raw, 0.0), sigma=15)
     weights      = gaussian_filter(valid_mask.astype(np.float32), sigma=15)
