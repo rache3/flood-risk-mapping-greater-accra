@@ -20,7 +20,7 @@
   <header>
     <h1>FloodWatch Ghana</h1>
     <div class="header-actions">
-      <span class="meta">Data: SRTM DEM - ERA5-Land Rainfall - ESA WorldCover - OSM | GeoBuilders Africa</span>
+      <span class="meta">Data: SRTM DEM - CHIRPS v2.0 Rainfall - ESA WorldCover - OSM | GeoBuilders Africa</span>
       <div id="search-container">
         <input type="text" id="search-input" placeholder="Search a town or city..." autocomplete="off" />
         <div id="search-results"></div>
@@ -60,8 +60,8 @@
       <div class="badge-title">Validated — May 18, 2025 Flood Event</div>
       <div class="badge-event">Greater Accra Floods · 132mm · 4 deaths · 3,000+ displaced</div>
       <div class="badge-desc">
-        6 of 7 flooded districts flagged as high risk. Recall 0.86 · F1 0.40.<br />
-        Rainfall from <strong class="text-strong">ERA5-Land</strong> monthly climatological means — smooth spatial surface for structural risk.
+        6 of 7 flooded districts flagged as high risk. Recall 0.86 · F1 0.44.<br />
+        Rainfall from <strong class="text-strong">CHIRPS v2.0</strong> monthly climatology — smooth spatial surface for structural risk.
         <span class="badge-note">
           Static structural model — GPM IMERG event-driven dynamic layer planned for v1.1.
         </span>
@@ -115,7 +115,7 @@
           </tr>
           <tr>
             <td>Precipitation</td>
-            <td>ERA5-Land Monthly Means (ECMWF)</td>
+            <td>CHIRPS v2.0 Monthly Climatology</td>
             <td>25%</td>
           </tr>
           <tr>
@@ -142,10 +142,10 @@
           (132mm rainfall, 4 deaths, 3,000+ displaced). Quantitative results across all 29 districts:</p>
         <ul style="margin:8px 0 8px 16px;font-size:13px;line-height:1.8">
           <li><strong>Recall: 0.86</strong> — 6 of 7 flooded districts flagged as high risk</li>
-          <li><strong>F1 Score: 0.40</strong></li>
-          <li>Flooded district mean risk (0.782) correctly exceeds non-flooded (0.765)</li>
+          <li><strong>F1 Score: 0.44</strong></li>
+          <li>Flooded district mean risk (0.763) correctly exceeds non-flooded (0.721)</li>
         </ul>
-        <p>Rainfall uses <strong class="about-text-strong">ERA5-Land monthly climatological means</strong> — a smooth spatial
+        <p>Rainfall uses <strong class="about-text-strong">CHIRPS v2.0 monthly climatology</strong> — a smooth spatial
           surface representing chronic rainfall patterns across the region. This is the correct input for a
           structural vulnerability model. NASA GPM IMERG (actual observed data) is reserved for the
           v1.1 dynamic event layer where single-event rainfall belongs.</p>

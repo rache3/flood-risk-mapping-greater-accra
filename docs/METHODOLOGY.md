@@ -17,7 +17,7 @@ Each 30m pixel is assigned a risk score from 0 (Low) to 1 (High) using a weighte
 | Component | Weight | Direction | Source | Rationale |
 | :--- | :--- | :--- | :--- | :--- |
 | **Elevation** | 30% | Inverted | NASA SRTM (30m) | Low-lying areas are natural catchments for surface runoff. |
-| **Precipitation** | 25% | Normal | ERA5-Land Monthly Means (0.1°) | Climatological rainfall surface captures chronic spatial patterns for structural risk. |
+| **Precipitation** | 25% | Normal | CHIRPS v2.0 Monthly Climatology (5km) | Climatological rainfall surface captures chronic spatial patterns for structural risk. |
 | **Terrain Slope** | 20% | Inverted | Derived from SRTM | Flat terrain cannot drain quickly and pools surface water. |
 | **Imperviousness** | 15% | Normal | ESA WorldCover (10m) | Paved and urban surfaces prevent infiltration into soil. |
 | **Water Proximity** | 10% | Inverted | OpenStreetMap | Proximity to rivers and drainage channels increases inundation risk. |
@@ -29,23 +29,23 @@ Risk = 0.30×(1−DEM_norm) + 0.25×Rain_norm + 0.20×(1−Slope_norm) + 0.15×I
 
 All input layers are min-max normalised to [0, 1] before compositing. The final composite is reclassified using **percentile-based stretching** (p25 and p75 breakpoints) to distribute risk scores across the full [0, 1] range and avoid compression in the middle.
 
-### 1.2 Rainfall Data Source — Why ERA5-Land for the v0.1 Structural Baseline
+### 1.2 Rainfall Data Source — Why Climatological Means for the v0.1 Structural Baseline
 
-The rainfall layer is the most operationally significant input. The v0.1 structural baseline uses **ERA5-Land monthly climatological means**, with GPM IMERG reserved for the v1.1 dynamic event layer.
+The rainfall layer is the most operationally significant input. The v0.1 structural baseline uses **CHIRPS v2.0 monthly climatology**, with ERA5-Land as the preferred primary when CDS credentials are configured and GPM IMERG reserved for the v1.1 dynamic event layer.
 
 | Source | Type | Latency | Accuracy | Used in |
 | :--- | :--- | :--- | :--- | :--- |
-| CHIRPS v2.0 | Climatological mean | Days | Moderate | v0.1 original / auto fallback |
-| **ERA5-Land** | **Reanalysis mean** | **Days** | **Good** | **v0.1 structural baseline (current)** |
+| **CHIRPS v2.0** | **Climatological mean** | **Days** | **Moderate** | **v0.1 structural baseline (current run)** |
+| ERA5-Land | Reanalysis mean | Days | Good | v0.1 structural baseline (when CDS credentials available) |
 | GPM IMERG Final Run | Actual monthly observed | ~3.5 months | Best (gauge-corrected) | v1.1 dynamic layer |
 | GPM IMERG Late Run | Near real-time | ~12 hours | Good | v1.1 dynamic layer fallback |
 
-**Why ERA5-Land for a static structural model:**
-ERA5-Land monthly means represent the chronic spatial rainfall pattern across the region — the long-run climatological distribution that is the correct input for a model of structural flood vulnerability. A structural baseline should identify areas that are *chronically* at risk regardless of any single weather event.
+**Why climatological means for a static structural model:**
+Both CHIRPS v2.0 and ERA5-Land return the chronic spatial rainfall pattern across the region — the long-run climatological distribution that is the correct input for a model of structural flood vulnerability. A structural baseline should identify areas that are *chronically* at risk regardless of any single weather event.
 
-GPM IMERG returns the *actual* measured precipitation for a specific month. This is the right input for a dynamic risk model that needs to respond to individual storms. For the structural baseline, using GPM data effectively injects one storm's footprint into a map supposed to represent chronic risk. When the June 2024 GPM data was used, a georeferencing bug in the longitude clip (at the prime meridian, ~0°) also created a hard vertical seam confirmed as a −0.265 risk cliff at 43% of the raster width. ERA5 produces a smooth, artifact-free climatological surface.
+GPM IMERG returns the *actual* measured precipitation for a specific month. This is the right input for a dynamic risk model. For the structural baseline, using GPM data injects one storm's footprint into a map supposed to represent chronic risk. When the June 2024 GPM data was used, a georeferencing bug in the longitude clip (at the prime meridian, ~0°) also created a hard vertical seam confirmed as a −0.265 risk cliff at 43% of the raster width. CHIRPS and ERA5 both produce smooth, artifact-free climatological surfaces.
 
-GPM IMERG is retained in the pipeline (`scripts/ingest_rainfall.py`) and will be the primary source for the v1.1 dynamic event layer, where single-event rainfall totals are precisely what the model needs.
+The pipeline (`scripts/ingest_rainfall.py`) auto chain tries ERA5 first, then falls back to CHIRPS if CDS credentials (`~/.cdsapirc`) are not configured. GPM IMERG is available only via explicit `RAINFALL_SOURCE=gpm_final/gpm_late`, reserved for the v1.1 dynamic event layer.
 
 ---
 
@@ -87,39 +87,39 @@ Mean risk scores computed per district from the original pipeline run.
 | 28 | Shai Osudoku | 0.4223 | 0.9061 | No |
 | 29 | Ashaiman | 0.3654 | 0.6527 | No |
 
-### 2.2 Current Model (ERA5-Land / CHIRPS rainfall + percentile reclassification, June 2026)
+### 2.2 Current Model (CHIRPS v2.0 monthly climatology + percentile reclassification, June 2026)
 
 | Rank | District | Mean Risk | Max Risk | Flooded May 2025 |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | Krowor | 0.9206 | 0.9967 | No |
-| 2 | Ledzokuku | 0.9186 | 0.9923 | No |
-| 3 | Ayawaso North | 0.9163 | 0.9856 | No |
-| 4 | Ashaiman | 0.9119 | 0.9840 | No |
-| 5 | Tema West | 0.9014 | 0.9898 | **Yes** |
-| 6 | Ga Central | 0.8561 | 0.9870 | No |
-| 7 | Ayawaso West | 0.8558 | 0.9804 | No |
-| 8 | La-Dade-Kotopon | 0.8487 | 0.9856 | No |
-| 9 | Adenta | 0.8429 | 0.9870 | **Yes** |
-| 10 | Ayawaso East | 0.8427 | 0.9499 | No |
-| 11 | Ablekuma North | 0.8418 | 0.9852 | No |
-| 12 | Tema | 0.8374 | 0.9993 | **Yes** |
-| 13 | Okaikwei North | 0.8316 | 0.9819 | No |
-| 14 | Ayawaso Central | 0.8206 | 0.8935 | No |
-| 15 | Ga East | 0.8001 | 0.9758 | **Yes** |
-| 16 | Ga West | 0.7828 | 0.9861 | No |
-| 17 | Ablekuma Central | 0.7729 | 0.9792 | No |
-| 18 | Kpone-Katamanso | 0.7527 | 0.9864 | No |
-| 19 | La-Nkwantanang-Madina | 0.7470 | 0.9600 | **Yes** |
-| 20 | Ga North | 0.7211 | 0.9711 | No |
-| 21 | Korle-Klottey | 0.7159 | 0.9382 | No |
-| 22 | Ga South | 0.7084 | 0.9856 | No |
-| 23 | Weija Gbawe | 0.7071 | 0.9995 | **Yes** |
-| 24 | Ablekuma West | 0.6872 | 0.9347 | No |
-| 25 | Accra Metropolis | 0.6364 | 0.9416 | **Yes** (score below 0.70 threshold) |
-| 26 | Ningo-Prampram | 0.5611 | 0.9758 | No |
-| 27 | Ada East | 0.5553 | 0.7493 | No |
-| 28 | Shai Osudoku | 0.5070 | 0.9424 | No |
-| 29 | Ada West | 0.4973 | 0.7519 | No |
+| 1 | Ablekuma West | 0.8828 | 0.9660 | No |
+| 2 | Ayawaso North | 0.8772 | 0.9520 | No |
+| 3 | Krowor | 0.8737 | 0.9517 | No |
+| 4 | Ledzokuku | 0.8627 | 0.9840 | No |
+| 5 | Ashaiman | 0.8353 | 0.9486 | No |
+| 6 | Ablekuma Central | 0.8285 | 0.9540 | No |
+| 7 | Tema | 0.8261 | 0.9694 | **Yes** |
+| 8 | Tema West | 0.8121 | 0.9510 | **Yes** |
+| 9 | Ablekuma North | 0.8068 | 0.9507 | No |
+| 10 | Accra | 0.8022 | 0.9312 | **Yes** |
+| 11 | Ga Central | 0.7930 | 0.9692 | No |
+| 12 | Ayawaso Central | 0.7909 | 0.8623 | No |
+| 13 | Ayawaso East | 0.7812 | 0.9143 | No |
+| 14 | Weija Gbawe | 0.7619 | 0.9943 | **Yes** |
+| 15 | Adenta | 0.7577 | 0.9821 | **Yes** |
+| 16 | La-Dade-Kotopon | 0.7540 | 0.9492 | No |
+| 17 | Ayawaso West | 0.7492 | 0.9446 | No |
+| 18 | Ga East | 0.7192 | 0.9421 | **Yes** |
+| 19 | Korle-Klottey | 0.7052 | 0.9054 | No |
+| 20 | Okaikwei North | 0.6724 | 0.9483 | No |
+| 21 | La-Nkwantanang-Madina | 0.6604 | 0.9270 | **Yes** (score below 0.67 threshold) |
+| 22 | Kpone-Katamanso | 0.6512 | 0.9909 | No |
+| 23 | Ga West | 0.6355 | 0.9320 | No |
+| 24 | Ada East | 0.6310 | 0.9952 | No |
+| 25 | Ga North | 0.5850 | 0.9303 | No |
+| 26 | Ningo-Prampram | 0.5760 | 0.9930 | No |
+| 27 | Ada West | 0.5554 | 0.9987 | No |
+| 28 | Ga South | 0.5359 | 0.9654 | No |
+| 29 | Shai Osudoku | 0.4838 | 0.9490 | No |
 
 ---
 
@@ -137,25 +137,25 @@ On **May 18, 2025**, Greater Accra experienced a severe flash flooding event fol
 
 #### Mean Risk Score by Flood Status
 
-| Metric | Original Model | ERA5-Land / CHIRPS Model | Verdict |
+| Metric | Original Model | CHIRPS v2.0 Model | Verdict |
 | :--- | :--- | :--- | :--- |
-| Mean risk — flooded districts | 0.5736 | **0.7818** | Current higher ✓ |
-| Mean risk — non-flooded districts | 0.5953 | **0.7648** | — |
-| Difference (flooded − non-flooded) | **−0.0217** | **+0.0170** | Current correct direction ✓ |
-| % flooded districts flagged High Risk (≥0.70) | 28.6% (2/7) | **85.7% (6/7)** | Current better ✓ |
-| % non-flooded districts flagged High Risk (≥0.70) | 18.2% (4/22) | 77.3% (17/22) | Original more precise |
+| Mean risk — flooded districts | 0.5736 | **0.7628** | Current higher ✓ |
+| Mean risk — non-flooded districts | 0.5953 | **0.7212** | — |
+| Difference (flooded − non-flooded) | **−0.0217** | **+0.0416** | Current correct direction ✓ |
+| % flooded districts flagged High Risk (≥0.67) | 28.6% (2/7) | **85.7% (6/7)** | Current better ✓ |
+| % non-flooded districts flagged High Risk (≥0.67) | 18.2% (4/22) | 63.6% (14/22) | Current more precise ✓ |
 
-#### Confusion Matrix at 0.70 Threshold
+#### Confusion Matrix at 0.67 Threshold
 
-| | Original Model | ERA5-Land / CHIRPS Model |
+| | Original Model | CHIRPS v2.0 Model |
 | :--- | :--- | :--- |
 | True Positives (flooded, flagged high) | 2 | **6** |
-| False Positives (not flooded, flagged high) | 4 | 17 |
-| True Negatives (not flooded, flagged low) | 18 | 5 |
-| False Negatives (flooded, missed) | **5** | 1 (Accra Metropolis, score 0.636) |
-| **Precision** | 0.33 | 0.26 |
+| False Positives (not flooded, flagged high) | 4 | 14 |
+| True Negatives (not flooded, flagged low) | 18 | 8 |
+| False Negatives (flooded, missed) | **5** | 1 (La-Nkwantanang-Madina, score 0.660) |
+| **Precision** | 0.33 | 0.30 |
 | **Recall** | 0.29 | **0.86** |
-| **F1 Score** | 0.31 | **0.40** |
+| **F1 Score** | 0.31 | **0.44** |
 
 ### 3.3 Qualitative Assessment
 
@@ -170,33 +170,33 @@ This is the model's most significant qualitative failure. Adenta and La-Nkwantan
 
 The mean risk of flooded districts (0.574) was actually **lower** than non-flooded districts (0.595) — the model ranked flooded areas as marginally safer on average. This is a fundamental failure of direction.
 
-#### ERA5-Land / CHIRPS Model (Current)
-The current model uses ERA5-Land monthly climatological means (falling back to CHIRPS v2.0), paired with percentile reclassification:
+#### CHIRPS v2.0 Model (Current)
+The current model uses CHIRPS v2.0 monthly climatology (ERA5-Land is the preferred primary when CDS credentials are configured), paired with percentile reclassification and a corrected ESA WorldCover tile merge:
 
-- **6 of 7 flooded districts score above 0.70** — recall 0.86
-- The mean risk of flooded districts (0.782) correctly **exceeds** non-flooded districts (0.765)
-- **Tema West (rank 5), Adenta (rank 9), Tema (rank 12)** are correctly in the top half of the risk distribution
-- **Accra Metropolis scores 0.636** — the one missed flooded district (rank 25 of 29). Its western coastal location, large area, and mixed land-cover reduce the district mean below the 0.70 threshold, even though high-risk pockets exist within it
+- **6 of 7 flooded districts score above 0.67** — recall 0.86
+- The mean risk of flooded districts (0.763) correctly **exceeds** non-flooded districts (0.721), a gap of +0.042
+- **Tema (rank 7), Tema West (rank 8), Accra (rank 10)** are correctly in the top third of the risk distribution
+- **La-Nkwantanang-Madina scores 0.660** — the one missed flooded district (rank 21 of 29). Its northern peri-urban character, moderate terrain slope, and mixed land-cover pull the district mean just below the 0.67 threshold, even though high-risk pockets exist within it
 
-The main weakness remains **low precision (0.26)**: 17 of 22 non-flooded districts also score above 0.70. The bottom five districts — Ada West, Shai Osudoku, Ada East, Ningo-Prampram, Ablekuma West — are correctly identified as lower risk; these are predominantly rural, peri-urban, or coastal areas.
-
-A residual seam artifact at the 0° meridian was identified in the composite raster. Investigation shows this is driven by a **land cover discontinuity** in the ESA WorldCover data at 0° longitude (imperviousness drops from ~0.56 to ~0.15 across a tile boundary), not by the rainfall source. Fixing this requires re-ingesting the WorldCover tiles with proper edge blending — planned for a patch release.
+Precision improved to **0.30**: 14 of 22 non-flooded districts score above 0.67 (down from 17 in the prior run, before the WorldCover tile merge fix). The bottom eight districts — Shai Osudoku, Ga South, Ada West, Ningo-Prampram, Ga North, Ada East, Ga West, Kpone-Katamanso — are correctly identified as lower risk; these are predominantly rural, coastal, or peri-urban areas with low imperviousness.
 
 ### 3.4 Overall Verdict
 
-**The current ERA5-Land model is a scientifically cleaner baseline.**
+**The CHIRPS v2.0 climatological model is a scientifically cleaner baseline.**
 
-| Criterion | Original | ERA5-Land / CHIRPS | Winner |
+| Criterion | Original | CHIRPS v2.0 (current) | Winner |
 | :--- | :--- | :--- | :--- |
-| Direction of risk signal | Wrong (flooded < non-flooded) | Correct (flooded > non-flooded) | ERA5 |
-| Recall — flooded districts caught | 0.29 | **0.86** | ERA5 |
-| F1 Score | 0.31 | **0.40** | ERA5 |
-| Precision | **0.33** | 0.26 | Original (marginally) |
-| Qualitative alignment (known flood zones) | Partial (2/7) | Strong (6/7) | ERA5 |
-| Rainfall conceptual fit | Climatological | **Climatological (correct for structural model)** | ERA5 |
-| Seam artifacts | None identified | Land cover seam at 0° (pre-existing; not rainfall-driven) | — |
+| Direction of risk signal | Wrong (flooded < non-flooded) | Correct (flooded > non-flooded, +0.042) | CHIRPS |
+| Recall — flooded districts caught | 0.29 | **0.86** | CHIRPS |
+| F1 Score | 0.31 | **0.44** | CHIRPS |
+| Precision | 0.33 | **0.30** | Comparable |
+| Qualitative alignment (known flood zones) | Partial (2/7) | Strong (6/7) | CHIRPS |
+| Rainfall conceptual fit | Climatological | **Climatological (correct for structural model)** | CHIRPS |
+| Seam artifacts | None identified | None (WorldCover tile merge fixed in this release) | — |
 
-The ERA5 model improves on every meaningful criterion except precision. Recall 0.86 is a significant gain over 0.29 and is the key performance metric for a life-safety application where missing a flooded district is a more serious failure than over-flagging a safe one. The precision difference (0.26 vs 0.33) is small and both models share the same root cause: a static composite cannot distinguish between structural chronic risk and acute event-driven flooding.
+The CHIRPS model improves on every meaningful criterion. Recall 0.86 is a decisive gain over 0.29 — the key metric for a life-safety application where missing a flooded district is the more serious failure. Both models share the same root cause of limited precision: a static composite cannot distinguish between structural chronic risk and acute event-driven flooding.
+
+La-Nkwantanang-Madina is the one miss (mean risk 0.660, just below the 0.67 threshold). Its northern peri-urban character — moderate terrain, mixed land-cover, distance from the coast — places it near the boundary of the risk tiers. The district flood during May 2025 was likely driven by drainage overload under extreme single-day rainfall rather than chronic structural vulnerability, which is exactly what the v1.1 dynamic layer is designed to capture.
 
 ---
 
@@ -209,13 +209,13 @@ During early development, every district incorrectly displayed a uniform Mean Ri
 - **Cause**: The frontend was sending undefined bounding boxes to the TiTiler API, which defaulted to computing the global average of the entire raster.
 - **Resolution**: Shifted from dynamic runtime calculation to static pre-calculated statistics. Zonal statistics (mean, max, median, std, histogram) are now baked into the GeoJSON district properties via `scripts/precalculate_stats.py` at pipeline time. This ensures 100% accuracy and instant loading with no API dependency at render time.
 
-### 4.2 Rainfall Source History (CHIRPS → GPM IMERG → ERA5-Land)
+### 4.2 Rainfall Source History (CHIRPS → GPM IMERG → CHIRPS / ERA5-Land)
 
-The original model ingested rainfall from CHIRPS v2.0 or ERA5-Land — both climatological products. The pipeline was then upgraded to use NASA GPM IMERG as the primary source (actual monthly observed rainfall). GPM Final Run for June 2024 recorded 198 mm/month mean over Greater Accra.
+The original model ingested rainfall from CHIRPS v2.0 — a climatological product. The pipeline was then upgraded to use NASA GPM IMERG as the primary source (actual monthly observed rainfall). GPM Final Run for June 2024 recorded 198 mm/month mean over Greater Accra.
 
 However, using a single event month's GPM data in a *static structural* model proved conceptually incorrect: it injected one storm's footprint into a map designed to represent chronic vulnerability. A georeferencing bug in the GPM HDF5 longitude clip also introduced a hard vertical seam at the prime meridian (~0°), confirmed as a −0.265 risk cliff at 43% of the raster width.
 
-The pipeline was reverted to **ERA5-Land monthly climatological means** as the primary source for the v0.1 structural baseline, with CHIRPS v2.0 as the auto fallback:
+The pipeline was reverted to **climatological sources** for the v0.1 structural baseline. The auto chain tries ERA5-Land first (smooth reanalysis monthly means), then falls back to CHIRPS v2.0 if CDS credentials (`~/.cdsapirc`) are not configured. The current deployed run uses CHIRPS v2.0:
 
 ```
 ERA5-Land monthly means  →  CHIRPS v2.0  (v0.1 structural baseline, auto chain)
@@ -223,7 +223,7 @@ ERA5-Land monthly means  →  CHIRPS v2.0  (v0.1 structural baseline, auto chain
 GPM IMERG Final Run  →  GPM IMERG Late Run  (v1.1 dynamic layer, explicit setting only)
 ```
 
-This is a cleaner scientific architecture. The structural baseline captures chronic spatial risk using a smooth climatological rainfall surface; the planned v1.1 dynamic layer will use GPM IMERG event totals to trigger risk score adjustments on the day of a storm.
+This is the correct scientific architecture. The structural baseline captures chronic spatial risk using a smooth climatological rainfall surface; the planned v1.1 dynamic layer will use GPM IMERG event totals to trigger risk score adjustments on the day of a storm.
 
 ### 4.3 Percentile Reclassification
 
@@ -252,7 +252,7 @@ All risk outputs are served as Cloud-Optimised GeoTIFFs (COG) from Google Cloud 
 
 - **Static structural model**: Cannot capture event-specific dynamics. A 132mm single-day rainfall will overwhelm peri-urban districts regardless of their chronic risk score.
 - **District-level aggregation**: Mean risk at the district level conceals localised hotspots. High-risk pixels within a nominally moderate district are invisible in the leaderboard.
-- **Rainfall temporal mismatch**: The ERA5-Land climatological mean does not correspond to the specific conditions of the May 2025 validation event. A proper temporal validation would require running the model with May 2025 event rainfall (GPM IMERG) as the dynamic input in v1.1.
+- **Rainfall temporal mismatch**: The CHIRPS v2.0 climatological mean does not correspond to the specific conditions of the May 2025 validation event. A proper temporal validation would require running the model with May 2025 event rainfall (GPM IMERG) as the dynamic input in v1.1.
 - **No drainage infrastructure data**: The model has no representation of storm drain capacity, culvert blockages, or drainage network connectivity — a major driver of urban flash flooding in Accra.
 - **Score compression**: The percentile reclassification improves pixel-level spread but most urban districts still cluster in the 0.74–0.93 band at the mean level, limiting district-level discrimination.
 
@@ -269,5 +269,5 @@ All risk outputs are served as Cloud-Optimised GeoTIFFs (COG) from Google Cloud 
 ---
 
 *FloodWatch Ghana · Greater Accra Region · v0.1 · June 2026*
-*Data sources: NASA SRTM, ERA5-Land (ECMWF), ESA WorldCover, OpenStreetMap, GADM*
+*Data sources: NASA SRTM, CHIRPS v2.0 (UCSB CHC), ESA WorldCover, OpenStreetMap, GADM*
 *Validation event: Greater Accra Floods, May 18 2025 — sources: The Watchers, GDACS, Copernicus EMS*

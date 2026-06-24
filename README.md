@@ -65,7 +65,7 @@ Risk = 0.30 × (1 − norm_DEM)
 | Layer | Weight | Direction | Source | Rationale |
 |---|---|---|---|---|
 | Elevation (SRTM DEM) | 30% | Inverted | OpenTopography | Low-lying areas accumulate water |
-| Precipitation | 25% | Normal | ERA5-Land Monthly Means (ECMWF) | Chronic rainfall pattern drives runoff |
+| Precipitation | 25% | Normal | CHIRPS v2.0 Monthly Climatology | Chronic rainfall pattern drives runoff |
 | Terrain slope | 20% | Inverted | Derived from SRTM | Flat terrain drains poorly |
 | Land cover imperviousness | 15% | Normal | ESA WorldCover 2021 | Impervious surfaces increase runoff |
 | Distance to water bodies | 10% | Inverted | OpenStreetMap | Proximity to rivers increases risk |
@@ -179,7 +179,7 @@ python scripts/validate_flood_risk.py
 | Dataset | Source | Resolution | Auth |
 |---|---|---|---|
 | Elevation (DEM) | SRTM GL1 via OpenTopography | 30m | Free API key |
-| Precipitation | ERA5-Land (ECMWF CDS) / CHIRPS v2.0 | 0.1° / 5km | CDS account / Free |
+| Precipitation | CHIRPS v2.0 / ERA5-Land (ECMWF CDS) | 5km / 0.1° | Free / CDS account |
 | Slope | Derived from SRTM | 30m | — |
 | Land cover | ESA WorldCover 2021 | 10m | Free |
 | Water bodies | OpenStreetMap Overpass API | Variable | Open |
