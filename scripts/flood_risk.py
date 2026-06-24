@@ -318,22 +318,6 @@ def run():
     log.info("Aligning rainfall to DEM grid...")
     rainfall_raw = align_to_reference(RAINFALL_PATH, ref_profile)
 
-    # Smooth rainfall to remove GPM IMERG tile artifacts (10km → 30m upsampling)
-    valid_mask = np.isfinite(rainfall_raw)
-    smoothed = gaussian_filter(np.where(valid_mask, rainfall_raw, 0.0), sigma=40)
-    weights = gaussian_filter(valid_mask.astype(np.float32), sigma=40)
-    rainfall_raw = np.where(weights > 0, smoothed / weights, np.nan).astype(np.float32)
-    log.info("Rainfall smoothed (sigma=15) — GPM tile artifacts removed")
-    # GPM IMERG is ~10 km resolution (9×13 px over bbox) — 340× upsampling to
-    # 30 m DEM produces blocky tiles. Gaussian-weighted fill smooths the seams.
-    valid_mask = np.isfinite(rainfall_raw)
-    rainfall_smoothed = gaussian_filter(np.where(valid_mask, rainfall_raw, 0.0), sigma=15)
-    weight_mask = gaussian_filter(valid_mask.astype(np.float32), sigma=15)
-    del valid_mask
-    rainfall_raw = np.where(weight_mask > 0, rainfall_smoothed / weight_mask, np.nan).astype(np.float32)
-    del rainfall_smoothed, weight_mask
-    log.info("Rainfall smoothed (sigma=15) to remove GPM tile artifacts")
-
     log.info("Aligning slope to DEM grid...")
     slope_raw = align_to_reference(SLOPE_PATH, ref_profile)
 
@@ -347,9 +331,13 @@ def run():
     log.info("Normalising layers...")
     dem_norm         = normalise(dem_raw,         invert=True)   # low elev = high risk
     rainfall_norm    = normalise(rainfall_raw,    invert=False)  # high rain = high risk
+    del rainfall_raw
     slope_norm       = normalise(slope_raw,       invert=True)   # flat = high risk
+    del slope_raw
     landcover_norm   = normalise(landcover_raw,   invert=False)  # impervious = high risk
+    del landcover_raw
     waterbodies_norm = normalise(waterbodies_raw, invert=True)   # close to water = high risk
+    del waterbodies_raw
 
     reference_valid = np.isfinite(dem_raw)
     validate_layer_coverage(
@@ -371,15 +359,18 @@ def run():
         WEIGHTS["landcover"]   * landcover_norm   +
         WEIGHTS["waterbodies"] * waterbodies_norm
     ).astype(np.float32)
+    del dem_norm, rainfall_norm, slope_norm, landcover_norm, waterbodies_norm
 
     # Preserve NaN where DEM has no data
     risk[np.isnan(dem_raw)] = np.nan
+    del dem_raw
 
     # 5. Percentile-based reclassification
     log.info("Reclassifying to percentile-based risk tiers...")
     valid_pixels = risk[~np.isnan(risk)]
     p25 = np.percentile(valid_pixels, 25)
     p75 = np.percentile(valid_pixels, 75)
+    del valid_pixels
     log.info("Percentiles  p25=%.4f  p75=%.4f", p25, p75)
 
     risk_max = float(np.nanmax(risk))
@@ -390,7 +381,7 @@ def run():
     risk_classified[m_mid] = (0.33 + (risk[m_mid] - p25) / (p75 - p25) * 0.34)
     m_high = ~np.isnan(risk) & (risk >= p75)
     risk_classified[m_high] = (0.67 + (risk[m_high] - p75) / (risk_max - p75) * 0.33)
-    del m_low, m_mid, m_high
+    del m_low, m_mid, m_high, risk
 
     # Apply a light Gaussian blur to soften any remaining pixel-level transitions.
     # sigma=1.0 is subtle — just enough to remove single-pixel hard edges at
@@ -398,7 +389,9 @@ def run():
     try:
         nan_mask = np.isnan(risk_classified)
         risk_filled = np.where(nan_mask, 0.0, risk_classified)
+        del risk_classified
         risk_blurred = gaussian_filter(risk_filled, sigma=1.0).astype(np.float32)
+        del risk_filled
         risk_blurred[nan_mask] = np.nan  # Restore nodata mask
         risk = risk_blurred
         log.info("Applied sigma=1.0 Gaussian smoothing to risk surface")

@@ -35,18 +35,18 @@ Greater Accra is the pilot region. The pipeline is designed to scale across all 
 
 FloodWatch Ghana v0.1 was validated against the **May 18, 2025 Greater Accra flood event** — 132mm of rainfall, 4 deaths, 3,000+ displaced. Flooded districts were sourced from The Watchers, GDACS, and Copernicus EMS.
 
-**Result: Recall 1.00 · F1 0.44 · All 7 flooded districts correctly flagged as high risk**
+**Result: Recall 0.86 · F1 0.40 · 6 of 7 flooded districts correctly flagged as high risk**
 
 | Metric | Value |
 |---|---|
-| Flooded districts mean risk | 0.811 |
-| Non-flooded districts mean risk | 0.774 |
-| Flooded districts flagged high risk (≥0.70) | 7 of 7 (100%) |
-| Recall | 1.00 |
-| Precision | 0.28 |
-| F1 Score | 0.44 |
+| Flooded districts mean risk | 0.782 |
+| Non-flooded districts mean risk | 0.765 |
+| Flooded districts flagged high risk (≥0.70) | 6 of 7 (86%) |
+| Recall | 0.86 |
+| Precision | 0.26 |
+| F1 Score | 0.40 |
 
-The 7 flooded districts — Weija Gbawe, Accra Metropolis, Ga East, Tema, Tema West, La-Nkwantanang-Madina, Adenta — all scored above 0.70. The low precision (18 of 22 non-flooded districts also score high) reflects a known limitation of static structural models applied to a region where most urban districts share similar coastal, low-lying terrain. Improving precision requires dynamic, event-driven inputs — planned for v1.1.
+Six of 7 flooded districts — Tema West, Adenta, Tema, Ga East, La-Nkwantanang-Madina, Weija Gbawe — scored above 0.70. Accra Metropolis scored 0.636, narrowly below the high-risk threshold. The low precision (17 of 22 non-flooded districts also score high) reflects a known limitation of static structural models applied to a region where most urban districts share similar coastal, low-lying terrain. Improving precision requires dynamic, event-driven inputs — planned for v1.1.
 
 Full Methodology & District Leaderboard: [floodwatch.geobuildersafrica.com/METHODOLOGY.html](https://floodwatch.geobuildersafrica.com/METHODOLOGY.html)
 
@@ -65,7 +65,7 @@ Risk = 0.30 × (1 − norm_DEM)
 | Layer | Weight | Direction | Source | Rationale |
 |---|---|---|---|---|
 | Elevation (SRTM DEM) | 30% | Inverted | OpenTopography | Low-lying areas accumulate water |
-| Precipitation | 25% | Normal | CHIRPS v2.0 / GPM IMERG | Higher rainfall increases runoff |
+| Precipitation | 25% | Normal | ERA5-Land Monthly Means (ECMWF) | Chronic rainfall pattern drives runoff |
 | Terrain slope | 20% | Inverted | Derived from SRTM | Flat terrain drains poorly |
 | Land cover imperviousness | 15% | Normal | ESA WorldCover 2021 | Impervious surfaces increase runoff |
 | Distance to water bodies | 10% | Inverted | OpenStreetMap | Proximity to rivers increases risk |
@@ -78,13 +78,13 @@ Each layer is min-max normalised to [0, 1]. The composite score uses percentile-
 
 ```
 Input data sources
-(OpenTopography · CHIRPS/GPM · ESA S3 · OpenStreetMap Overpass API)
+(OpenTopography · ERA5-Land/CHIRPS · ESA S3 · OpenStreetMap Overpass API)
               │
               ▼
     scripts/ingest.py
     ├── ingest_dem.py          ← SRTM 30m DEM via OpenTopography API
     ├── ingest_slope.py        ← Slope derived from DEM using NumPy gradient
-    ├── ingest_rainfall.py     ← GPM IMERG Final → Late → ERA5 → CHIRPS fallback
+    ├── ingest_rainfall.py     ← ERA5-Land → CHIRPS (v0.1); GPM IMERG retained for v1.1
     ├── ingest_landcover.py    ← ESA WorldCover 2021 → imperviousness fraction
     ├── ingest_waterbodies.py  ← OSM water features → distance raster
     └── ingest_aod.py          ← MODIS/MERRA-2 AOD → quality flagging (optional)
@@ -127,7 +127,7 @@ floodwatch-ghana/
 │   ├── ingest.py              # Orchestrator
 │   ├── ingest_dem.py          # SRTM DEM download
 │   ├── ingest_slope.py        # Slope derivation
-│   ├── ingest_rainfall.py     # GPM IMERG / CHIRPS precipitation
+│   ├── ingest_rainfall.py     # ERA5-Land / CHIRPS precipitation (GPM IMERG for v1.1)
 │   ├── ingest_landcover.py    # ESA WorldCover
 │   ├── ingest_waterbodies.py  # OSM water features
 │   ├── ingest_aod.py          # AOD quality flagging
@@ -179,7 +179,7 @@ python scripts/validate_flood_risk.py
 | Dataset | Source | Resolution | Auth |
 |---|---|---|---|
 | Elevation (DEM) | SRTM GL1 via OpenTopography | 30m | Free API key |
-| Precipitation | CHIRPS v2.0 / GPM IMERG | 5km / 10km | Free / Earthdata |
+| Precipitation | ERA5-Land (ECMWF CDS) / CHIRPS v2.0 | 0.1° / 5km | CDS account / Free |
 | Slope | Derived from SRTM | 30m | — |
 | Land cover | ESA WorldCover 2021 | 10m | Free |
 | Water bodies | OpenStreetMap Overpass API | Variable | Open |
@@ -206,7 +206,7 @@ python scripts/validate_flood_risk.py
 - **No pixel-level validation** — validation is at the district mean level against reported flood locations. Quantitative spatial validation using Sentinel-1 SAR flood extent maps is planned for v1.1
 - Static risk model captures chronic structural vulnerability — not event-driven flash flooding
 - Districts like Adenta and La-Nkwantanang-Madina may flood under extreme rainfall events not predicted by the static model
-- Real-time rainfall thresholds via GPM IMERG Late Run are planned for v1.1
+- Real-time rainfall thresholds via GPM IMERG Late Run are planned for v1.1 dynamic layer
 - Greater Accra pilot only — expansion to other Ghana regions in progress
 
 ---
