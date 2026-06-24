@@ -156,6 +156,14 @@ def download_worldcover_tile(tile_name: str, output_path: str) -> bool:
         log.info("Tile downloaded (%.0f MB) → %s", size_mb, output_path)
         return True
 
+    except OSError as e:
+        if e.errno == 28:  # No space left on device
+            log.warning("Disk full during download of tile %s — will try VSICURL", tile_name)
+            if os.path.exists(output_path):
+                os.remove(output_path)
+        else:
+            log.error("I/O error during download of tile %s: %s", tile_name, e)
+        return False
     except urllib.error.HTTPError as e:
         log.error("HTTP error %s: tile %s may not exist", e.code, tile_name)
         return False
@@ -329,33 +337,49 @@ def main():
     # Find which tiles we need
     tiles = find_worldcover_tile(BBOX)
 
-    # Download tiles
+    # Download tiles; fall back to VSICURL remote access when disk is full.
+    # VSICURL lets rasterio read COG tiles directly from the ESA S3 bucket without
+    # writing a local copy — only the windows overlapping our bbox are fetched.
+    ESA_S3_BASE = "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map"
     tile_paths = []
+    local_tile_paths = []  # Only local files get deleted at cleanup
     for tile in tiles:
         tile_path = os.path.join(DATA_DIR, f"worldcover_{tile}.tif")
         if os.path.exists(tile_path):
             log.info("Tile already downloaded: %s", tile_path)
             tile_paths.append(tile_path)
+            local_tile_paths.append(tile_path)
             continue
 
         success = download_worldcover_tile(tile, tile_path)
         if success:
             tile_paths.append(tile_path)
+            local_tile_paths.append(tile_path)
         else:
-            log.error("Failed to download tile %s", tile)
+            # Download failed (disk full or network). Try reading remotely via VSICURL.
+            filename = f"ESA_WorldCover_10m_2021_v200_{tile}_Map.tif"
+            vsicurl_path = f"/vsicurl/{ESA_S3_BASE}/{filename}"
+            log.info("Attempting VSICURL remote access for tile %s ...", tile)
+            try:
+                import rasterio
+                with rasterio.open(vsicurl_path) as _test:
+                    log.info("VSICURL OK for tile %s — will read remotely (no local copy)", tile)
+                tile_paths.append(vsicurl_path)
+                # Do not add to local_tile_paths — nothing to delete
+            except Exception as ve:
+                log.warning("VSICURL unavailable for tile %s: %s", tile, ve)
+                log.warning("Tile %s skipped — its coverage area defaults to 0.15 imperviousness", tile)
 
     if not tile_paths:
-        log.error("No WorldCover tiles downloaded.")
+        log.error("No WorldCover tiles available (downloaded or remote).")
         log.error("Check your internet connection and try again.")
         raise SystemExit(1)
 
-    # Clip each tile to bbox window first, then merge the small clipped arrays.
-    # This avoids loading full 200-500MB tiles into RAM (which causes OOM/exit 137).
     if len(tile_paths) == 1:
         raw_tile = tile_paths[0]
         clip_and_resample(raw_tile, OUTPUT_RAW_PATH, BBOX, target_shape=dem_shape)
     else:
-        log.info("Merging %d tiles using memory-efficient windowed clip...", len(tile_paths))
+        log.info("Merging %d tiles (local + remote) using rasterio.merge...", len(tile_paths))
         raw_tile = os.path.join(DATA_DIR, "worldcover_merged.tif")
         _merge_tiles_windowed(tile_paths, raw_tile, BBOX)
         clip_and_resample(raw_tile, OUTPUT_RAW_PATH, BBOX, target_shape=dem_shape)
@@ -363,8 +387,8 @@ def main():
     # Convert class codes to imperviousness fraction
     compute_imperviousness(OUTPUT_RAW_PATH, OUTPUT_PATH)
 
-    # Clean up large intermediate tile files to free disk space
-    for tile_path in tile_paths:
+    # Clean up local tile files to free disk space (VSICURL paths are skipped)
+    for tile_path in local_tile_paths:
         if os.path.exists(tile_path):
             os.remove(tile_path)
             log.info("Removed tile file: %s", tile_path)
@@ -376,75 +400,52 @@ def main():
 
 def _merge_tiles_windowed(tile_paths: list, output_path: str, bbox: dict) -> None:
     """
-    Merge multiple WorldCover tiles by clipping each to the bbox window first.
-    This is memory-efficient — we never load full 200-500MB tiles into RAM.
-    Only the small clipped sub-arrays are held in memory at any time.
+    Merge WorldCover tiles using rasterio.merge with explicit bbox bounds.
+
+    This is merge-then-clip — rasterio reads only the windows overlapping the
+    bbox from each tile and assembles them with correct spatial alignment.
+    No seam exists at tile boundaries because the merge is spatially aware.
+
+    The previous implementation clipped each tile to the full bbox independently,
+    producing arrays of different shapes (each covering only its own tile's
+    portion of the bbox). The shape-equality guard then silently dropped all but
+    the first tile, leaving the eastern half of the study area with no data.
     """
     import rasterio
-    from rasterio.windows import from_bounds
+    from rasterio.merge import merge as rio_merge
 
-    log.info("Windowed tile merge: clipping each tile to bbox before merging...")
+    bounds = (bbox["west"], bbox["south"], bbox["east"], bbox["north"])
+    log.info("Merging %d tiles with rasterio.merge (bounds=%s)...", len(tile_paths), bounds)
 
-    clipped_arrays = []
-    ref_profile = None
+    srcs = []
+    try:
+        for tp in tile_paths:
+            srcs.append(rasterio.open(tp))
+            log.info("  Opened tile: %s", os.path.basename(tp))
 
-    for tile_path in tile_paths:
-        with rasterio.open(tile_path) as src:
-            # Only read the window that overlaps our bbox — not the full tile
-            window = from_bounds(
-                bbox["west"], bbox["south"],
-                bbox["east"], bbox["north"],
-                src.transform,
-            )
-            # Clamp window to valid tile bounds
-            window = window.intersection(rasterio.windows.Window(0, 0, src.width, src.height))
-            if window.width <= 0 or window.height <= 0:
-                log.info("Tile %s does not overlap bbox — skipping", tile_path)
-                continue
+        merged_data, merged_transform = rio_merge(
+            srcs,
+            bounds=bounds,
+            method="first",
+        )
 
-            data = src.read(1, window=window)
-            win_transform = src.window_transform(window)
+        ref_profile = srcs[0].profile.copy()
+        ref_profile.update(
+            height=merged_data.shape[1],
+            width=merged_data.shape[2],
+            transform=merged_transform,
+            compress="deflate",
+        )
 
-            if ref_profile is None:
-                ref_profile = src.profile.copy()
-                ref_profile.update(
-                    height=data.shape[0],
-                    width=data.shape[1],
-                    transform=win_transform,
-                    compress="deflate",
-                )
+        with rasterio.open(output_path, "w", **ref_profile) as dst:
+            dst.write(merged_data)
 
-            clipped_arrays.append((data, win_transform))
-            log.info("Clipped tile %s → shape %s (%.1f MB in memory)",
-                     os.path.basename(tile_path), data.shape,
-                     data.nbytes / 1024 / 1024)
+        log.info("Merge complete → %s  shape=%s  (%.1f MB)",
+                 output_path, merged_data.shape[1:], merged_data.nbytes / 1024 / 1024)
 
-    if not clipped_arrays:
-        raise ValueError("No tiles overlapped the bounding box")
-
-    if len(clipped_arrays) == 1:
-        merged, merged_transform = clipped_arrays[0]
-    else:
-        # Simple numpy stack for small clipped arrays — no memory issue at this size
-        # Use first array as base, fill with subsequent (handles edge overlaps)
-        merged = clipped_arrays[0][0]
-        merged_transform = clipped_arrays[0][1]
-        for arr, _ in clipped_arrays[1:]:
-            # Where base has nodata (0), fill from next tile
-            mask = merged == 0
-            if mask.any() and arr.shape == merged.shape:
-                merged[mask] = arr[mask]
-
-    ref_profile.update(
-        height=merged.shape[0],
-        width=merged.shape[1],
-        transform=merged_transform,
-    )
-
-    with rasterio.open(output_path, "w", **ref_profile) as dst:
-        dst.write(merged, 1)
-
-    log.info("Windowed merge complete → %s  shape=%s", output_path, merged.shape)
+    finally:
+        for src in srcs:
+            src.close()
 
 
 if __name__ == "__main__":

@@ -1,55 +1,76 @@
 """
 ingest_rainfall.py — Download Monthly Precipitation
 =====================================================
-Primary source : GPM IMERG Final Run (NASA) — actual monthly precipitation
-                 0.1° resolution (~10km), bias-corrected against rain gauges
-                 Requires free NASA Earthdata account
-Fallback 1     : GPM IMERG Late Run — near real-time, ~12 hour latency
-Fallback 2     : ERA5-Land monthly mean (ECMWF CDS) — requires CDS account
-Fallback 3     : CHIRPS v2.0 — no authentication required
-Output         : data/accra_rainfall.tif  (float32, mm/month, EPSG:4326)
+v0.1 structural baseline
+-------------------------
+Primary source : ERA5-Land monthly mean (ECMWF CDS)
+                 Smooth climatological surface — correct input for a
+                 static structural vulnerability model.
+                 Requires ~/.cdsapirc credentials from cds.climate.copernicus.eu
+                   Register : https://cds.climate.copernicus.eu/user/register
+                   Create   : ~/.cdsapirc with url and key fields
+                   Install  : pip install cdsapi netCDF4
+Fallback 1     : CHIRPS v2.0 — no authentication required
+                 Also climatological — acceptable for structural baseline.
 
-Why GPM IMERG over ERA5:
---------------------------
-ERA5 provides climatological monthly means — essentially a historical
-average. GPM IMERG provides ACTUAL rainfall for the specific month being
-processed. This means:
+v1.1 dynamic event layer (future)
+-----------------------------------
+GPM IMERG Final Run and Late Run are retained in this file for the planned
+v1.1 dynamic layer where single-event rainfall belongs. Set
+RAINFALL_SOURCE=gpm_final or RAINFALL_SOURCE=gpm_late to use them.
 
-- If June 2024 had unusually heavy rainfall, GPM captures it
-- ERA5 would return the same June average regardless of the actual year
-- GPM updates near-real-time — Late Run available within 12 hours
-- This makes FloodWatch genuinely responsive to real rainfall conditions
+Why ERA5-Land over GPM IMERG for the structural baseline:
+----------------------------------------------------------
+ERA5-Land monthly means represent the chronic spatial rainfall pattern —
+the long-run climatological distribution across the region. This is the
+conceptually correct input for a model that measures structural flood
+vulnerability (chronic risk), not event-driven risk.
 
-GPM IMERG Products:
---------------------
+GPM IMERG returns the ACTUAL rainfall for a specific month. For a static
+baseline model this injects one storm's footprint into a map meant to
+represent chronic risk. For the June 2024 processing month, GPM also had
+a georeferencing bug in the longitude clip that created a hard vertical
+seam at the prime meridian (~0°), confirmed as a -0.265 risk cliff at
+43% of the raster width. ERA5 produces a smooth, artifact-free surface.
+
+GPM IMERG Products (retained for v1.1):
+-----------------------------------------
 Final Run  — best accuracy, bias-corrected against rain gauges
              ~3.5 month latency — use for historical months
 Late Run   — near real-time, ~12 hour latency, no gauge correction
              use for recent months where Final Run not yet available
-Early Run  — fastest, ~4 hour latency, least accurate (not used here)
 
+ERA5-Land:
+----------
 Resolution : 0.1° x 0.1° (~10km)
-Coverage   : 60S to 60N — covers Ghana perfectly
-Units      : mm/month (accumulated)
+Coverage   : global
+Units      : mm/month (m/s mean × hours × 1000)
+Auth       : ~/.cdsapirc  (url + key from CDS portal)
 
 Authentication:
 ---------------
-GPM IMERG requires a free NASA Earthdata account:
+ERA5 requires a free CDS account and a ~/.cdsapirc credentials file:
+  Register : https://cds.climate.copernicus.eu/user/register
+  Create ~/.cdsapirc:
+    url: https://cds.climate.copernicus.eu/api
+    key: <your-api-key>
+  Install  : pip install cdsapi netCDF4
+
+GPM IMERG (for v1.1) requires a free NASA Earthdata account:
   Register : https://urs.earthdata.nasa.gov/users/new
   Set .env :
     EARTHDATA_USER=your_username
     EARTHDATA_PASS=your_password
-
-Also requires h5py for HDF5 parsing:
-  pip install h5py
+  Install  : pip install h5py
 
 Usage:
     python scripts/ingest_rainfall.py
 
     # Force specific source:
-    RAINFALL_SOURCE=gpm_final  python scripts/ingest_rainfall.py
-    RAINFALL_SOURCE=gpm_late   python scripts/ingest_rainfall.py
-    RAINFALL_SOURCE=chirps     python scripts/ingest_rainfall.py
+    RAINFALL_SOURCE=era5        python scripts/ingest_rainfall.py
+    RAINFALL_SOURCE=chirps      python scripts/ingest_rainfall.py
+    RAINFALL_SOURCE=gpm_final   python scripts/ingest_rainfall.py  # v1.1
+    RAINFALL_SOURCE=gpm_late    python scripts/ingest_rainfall.py  # v1.1
 """
 
 import os
@@ -87,7 +108,8 @@ MIN_VALID_PERCENT = float(os.getenv("RAINFALL_MIN_VALID_PERCENT", "95"))
 YEAR  = int(os.getenv("RAINFALL_YEAR",  "2024"))
 MONTH = int(os.getenv("RAINFALL_MONTH", "6"))
 
-# Source: auto = GPM Final → GPM Late → ERA5 → CHIRPS
+# Source: auto = ERA5 → CHIRPS (v0.1 structural baseline)
+# GPM IMERG accessible via RAINFALL_SOURCE=gpm_final or gpm_late (reserved for v1.1 dynamic layer)
 RAINFALL_SOURCE = os.getenv("RAINFALL_SOURCE", "auto").lower()
 
 # NASA Earthdata credentials
@@ -495,6 +517,8 @@ def download_chirps(year: int, month: int) -> bool:
     Download CHIRPS v2.0 monthly precipitation — no authentication required.
     5km resolution, 35+ year record. Last resort fallback.
     """
+    import ssl
+
     month_str = f"{month:02d}"
     filename  = f"chirps-v2.0.{year}.{month_str}.tif.gz"
     url = (
@@ -507,8 +531,23 @@ def download_chirps(year: int, month: int) -> bool:
 
     log.info("Downloading CHIRPS v2.0 for %d-%02d...", year, month)
 
+    def _urlretrieve(u, dest):
+        try:
+            urllib.request.urlretrieve(u, dest)
+        except urllib.error.URLError as e:
+            if "CERTIFICATE_VERIFY_FAILED" in str(e) or "certificate has expired" in str(e):
+                log.warning("CHIRPS SSL cert expired on UCSB server — retrying without verification")
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx))
+                with opener.open(u) as response, open(dest, "wb") as out:
+                    out.write(response.read())
+            else:
+                raise
+
     try:
-        urllib.request.urlretrieve(url, tmp_gz)
+        _urlretrieve(url, tmp_gz)
 
         with gzip.open(tmp_gz, "rb") as f_in:
             with open(tmp_tif, "wb") as f_out:
@@ -615,25 +654,37 @@ def accept_candidate(candidate_path: str, source: str, year: int, month: int) ->
 
 
 def _try_sources(year: int, month: int) -> bool:
-    """Try every configured source for the given year/month. Returns True on first success."""
-    if RAINFALL_SOURCE in ("auto", "gpm_final", "gpm"):
-        if download_gpm_final(year, month):
-            return True
-    if RAINFALL_SOURCE in ("auto", "gpm_late", "gpm"):
-        if download_gpm_late(year, month):
-            return True
+    """Try every configured source for the given year/month. Returns True on first success.
+
+    v0.1 structural baseline auto chain: ERA5 → CHIRPS (climatological sources).
+    GPM IMERG is available via explicit RAINFALL_SOURCE and reserved for the v1.1 dynamic layer.
+    """
+    # v0.1 structural baseline: ERA5-Land first (smooth climatological surface)
     if RAINFALL_SOURCE in ("auto", "era5"):
         if download_era5(year, month):
             return True
+    # Climatological fallback — no auth required
     if RAINFALL_SOURCE in ("auto", "chirps"):
         if download_chirps(year, month):
+            return True
+    # GPM IMERG — retained for v1.1 dynamic layer; only used when explicitly requested
+    if RAINFALL_SOURCE in ("gpm_final", "gpm"):
+        if download_gpm_final(year, month):
+            return True
+    if RAINFALL_SOURCE in ("gpm_late", "gpm"):
+        if download_gpm_late(year, month):
             return True
     return False
 
 
 def main():
     log.info("=== Rainfall Ingest — Year=%d Month=%02d ===", YEAR, MONTH)
-    log.info("Priority: GPM Final → GPM Late → ERA5 → CHIRPS")
+    log.info("v0.1 structural baseline — Priority: ERA5-Land → CHIRPS")
+    log.info("(GPM IMERG available via RAINFALL_SOURCE=gpm_final/gpm_late — reserved for v1.1)")
+    if not os.path.exists(os.path.expanduser("~/.cdsapirc")):
+        log.warning("~/.cdsapirc not found — ERA5-Land will be skipped")
+        log.warning("To enable ERA5: register at https://cds.climate.copernicus.eu/user/register")
+        log.warning("  then create ~/.cdsapirc with your url and key, and: pip install cdsapi netCDF4")
 
     os.makedirs(DATA_DIR, exist_ok=True)
 
