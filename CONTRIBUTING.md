@@ -235,12 +235,24 @@ All three must pass before a PR can be merged.
 - Adapt the pipeline for other Ghana regions
 - Test on other West African cities
 
+**Open Research Questions**
+This project surfaces questions relevant beyond its immediate implementation, offered here as points of departure for collaborators:
+
+Climatological vs. event-driven inputs. 
+Should a static structural vulnerability model use climatological rainfall (CHIRPS/ERA5 monthly means) or actual event rainfall (GPM IMERG)? Does the answer change for a dynamic risk layer designed to respond to specific storms?
+Weight elicitation. 
+The current model uses expert-defined MCDA weights (DEM 30%, rainfall 25%, slope 20%, landcover 15%, water proximity 10%). Would AHP-derived weights, elicited from Ghanaian disaster management practitioners, meaningfully change district rankings — and how would that be validated without a longer historical flood record?
+Precision under high baseline risk. 
+In regions where most administrative units share similar coastal, low-lying terrain (as in Greater Accra), is precision an appropriate metric for a structural model at all, or does it penalize the model for correctly describing genuine widespread vulnerability?
+Resolution mismatch propagation.
+How should composite raster models formally handle and disclose uncertainty introduced when input layers of differing native resolution (30m DEM vs. 10km rainfall) are combined, beyond ad hoc smoothing?
+
 ---
 
 ## Contact
 
 **Rachel Atia** — Founder, GeoBuilders Africa  
-Email: rachelatia@geobuildersafrica.com  
+Email: atiarachel94@gmail.com 
 GitHub: [@rache3](https://github.com/rache3)  
 Website: [geobuildersafrica.com](https://geobuildersafrica.com)
 
