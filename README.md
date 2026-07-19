@@ -201,13 +201,16 @@ python scripts/validate_flood_risk.py
 
 ---
 
+Related Work
+Existing flood risk work for Accra has largely been academic and static. Nyarko (2002) applied a rational model in GIS for flood risk in Accra; Amoako and Frimpong-Boamah (2015) examined the physical dimensions of urban flooding across the metropolitan area; Andersen et al. (2024) screened flood-prone areas using SRTM-derived hydrological methods, noting the region's reliance on 1999-era elevation data. None of these are deployed as live, reproducible, open-source pipelines.
+Globally, Google Flood Hub and its Groundsource extension (2026) address a different problem: when will a flood occur, forecast at city-scale resolution using globally mined data. Google's own documentation acknowledges that ground truth for African cities remains sparse, limiting model confidence in exactly the regions where local structural context matters most. FloodWatch Ghana addresses the complementary where question — chronic, district-level structural vulnerability — using data sources and a methodology openly reproducible without institutional infrastructure.
+
+
 ## Known limitations
 
-- **No pixel-level validation** — validation is at the district mean level against reported flood locations. Quantitative spatial validation using Sentinel-1 SAR flood extent maps is planned for v1.1
-- Static risk model captures chronic structural vulnerability — not event-driven flash flooding
-- Districts like Adenta and La-Nkwantanang-Madina may flood under extreme rainfall events not predicted by the static model
-- Real-time rainfall thresholds via GPM IMERG Late Run are planned for v1.1 dynamic layer
-- Greater Accra pilot only — expansion to other Ghana regions in progress
+An earlier development version of this pipeline used single-month GPM IMERG Final Run rainfall in place of the current climatological CHIRPS/ERA5 input. This produced a visually sharp, spatially implausible discontinuity in the output risk surface at 0° longitude — the prime meridian runs directly through Greater Accra.
+Diagnosis traced the artifact to two compounding causes: (1) GPM IMERG's coarse ~10km resolution (9×13 pixels over the study area) required aggressive upsampling to the 30m DEM grid, and (2) an independent ESA WorldCover tile boundary at the same longitude, where imperviousness values jumped from 0.56 to 0.15 across a single pixel. The rainfall artifact masked the pre-existing landcover tile seam; removing GPM exposed the second, unrelated bug.
+This is documented deliberately rather than silently fixed, as a case study in a broader methodological question: composite spatial risk models are only as spatially coherent as their least-aligned input layer, and single-event rainfall data — however more "accurate" in an instantaneous sense — may be conceptually mismatched with a model intended to represent chronic, structural vulnerability rather than one storm's footprint. GPM IMERG is retained in the codebase for the planned v1.1 dynamic/event-driven layer, where this concern does not apply.
 
 ---
 
