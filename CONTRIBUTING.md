@@ -240,10 +240,13 @@ This project surfaces questions relevant beyond its immediate implementation, of
 
 Climatological vs. event-driven inputs. 
 Should a static structural vulnerability model use climatological rainfall (CHIRPS/ERA5 monthly means) or actual event rainfall (GPM IMERG)? Does the answer change for a dynamic risk layer designed to respond to specific storms?
+
 Weight elicitation. 
 The current model uses expert-defined MCDA weights (DEM 30%, rainfall 25%, slope 20%, landcover 15%, water proximity 10%). Would AHP-derived weights, elicited from Ghanaian disaster management practitioners, meaningfully change district rankings — and how would that be validated without a longer historical flood record?
+
 Precision under high baseline risk. 
 In regions where most administrative units share similar coastal, low-lying terrain (as in Greater Accra), is precision an appropriate metric for a structural model at all, or does it penalize the model for correctly describing genuine widespread vulnerability?
+
 Resolution mismatch propagation.
 How should composite raster models formally handle and disclose uncertainty introduced when input layers of differing native resolution (30m DEM vs. 10km rainfall) are combined, beyond ad hoc smoothing?
 
