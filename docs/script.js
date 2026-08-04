@@ -1,6 +1,6 @@
 const TITILER_URL = "https://titiler-z2qegb4nha-uc.a.run.app";
-const R2_PUBLIC = "https://storage.googleapis.com/accra-flood-risk";
-const COG_URL = `${R2_PUBLIC}/rasters/flood_risk_map.cog.tif?v=11`;
+const R2_PUBLIC = "https://pub-8eb5bbc88b134fe795056f57988e73e4.r2.dev";
+const COG_URL = `${R2_PUBLIC}/rasters/flood_risk_map.cog.tif?v=12`;
 const GEOJSON_URL = "./gadm41_GHA_accra.json";
 
 const TILE_URL = `${TITILER_URL}/cog/tiles/{z}/{x}/{y}` +
