@@ -1,0 +1,8 @@
+# Ruff configuration for FloodWatch Ghana
+# BLE001 (blind except Exception) is intentionally allowed in pipeline
+# scripts — ingest/processing steps must continue past unpredictable
+# third-party API failures (network, HDF5 parsing, GDAL errors) without
+# crashing the whole pipeline run.
+
+[lint]
+ignore = ["BLE001"]
