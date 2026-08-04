@@ -42,7 +42,7 @@ jobs:
             scripts/ingest_landcover.py \
             scripts/ingest_waterbodies.py \
             scripts/flood_risk.py \
-            scripts/upload_gcs.py; do
+            scripts/upload_r2.py; do
             if [ ! -f "$f" ]; then
               echo "Missing: $f"
               exit 1
