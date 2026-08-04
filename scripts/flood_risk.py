@@ -389,7 +389,6 @@ def run():
     try:
         nan_mask = np.isnan(risk_classified)
         risk_filled = np.where(nan_mask, 0.0, risk_classified)
-        del risk_classified
         risk_blurred = gaussian_filter(risk_filled, sigma=1.0).astype(np.float32)
         del risk_filled
         risk_blurred[nan_mask] = np.nan  # Restore nodata mask
@@ -398,7 +397,6 @@ def run():
     except ImportError:
         log.warning("scipy not available — skipping Gaussian smoothing (pip install scipy)")
         risk = risk_classified
-
     valid_count = np.sum(~np.isnan(risk))
     log.info("Risk stats  min=%.4f  max=%.4f  mean=%.4f  valid_pixels=%d",
              np.nanmin(risk), np.nanmax(risk), np.nanmean(risk), valid_count)
