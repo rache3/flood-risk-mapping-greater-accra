@@ -1,0 +1,67 @@
+# .github/workflows/pipeline.yml
+# Runs the FloodWatch Ghana data pipeline monthly and on manual trigger.
+# No GCP dependency — runs natively on the GitHub Actions runner and
+# uploads outputs directly to Cloudflare R2.
+
+name: Flood Risk Pipeline
+
+on:
+  schedule:
+    - cron: "0 3 1 * *"   # 1st of every month, 03:00 UTC
+  workflow_dispatch:       # allow manual trigger from the Actions tab
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install boto3 h5py
+
+      - name: Run data ingest
+        env:
+          EARTHDATA_USER: ${{ secrets.EARTHDATA_USER }}
+          EARTHDATA_PASS: ${{ secrets.EARTHDATA_PASS }}
+          OPENTOPO_API_KEY: ${{ secrets.OPENTOPO_API_KEY }}
+          RAINFALL_MIN_VALID_PERCENT: ${{ vars.RAINFALL_MIN_VALID_PERCENT || '65' }}
+        run: python scripts/ingest.py
+
+      - name: Compute flood risk model
+        run: python scripts/flood_risk.py
+
+      - name: Validate against May 2025 flood event
+        run: python scripts/validate_flood_risk.py
+
+      - name: Upload outputs to Cloudflare R2
+        env:
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+          R2_PUBLIC_URL: ${{ vars.R2_PUBLIC_URL }}
+        run: python scripts/upload_r2.py
+
+      - name: Log completion
+        if: success()
+        run: |
+          echo "### Pipeline completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "- **Completed at:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Live map:** https://floodwatch.geobuildersafrica.com" >> $GITHUB_STEP_SUMMARY
+
+      - name: Log failure
+        if: failure()
+        run: |
+          echo "### Pipeline FAILED — check logs above" >> $GITHUB_STEP_SUMMARY
